@@ -1,12 +1,13 @@
-FITA Netlify v6 — original-design update
+FITA automatic upcoming-shows updates (GitHub Pages, branch deployment)
 
-Deploy: unzip and drag the FITA-Netlify-Original-Design-v6 folder into Netlify Drop.
+1. Keep your existing styles.css, script.js, images/ and other files.
+2. Upload index.template.html, shows.json, scripts/build-shows.mjs and .github/workflows/update-shows.yml to the same repository, preserving folders.
+3. Set repository Settings > Actions > General > Workflow permissions to Read and write permissions (if available). Ensure GitHub Pages deploys from the main branch (Settings > Pages).
+4. Open Actions > Update upcoming shows HTML > Run workflow once. This creates/updates index.html and publishes the crawlable shows through your existing Pages branch deployment.
+5. Going forward, ONLY edit shows.json. Each commit triggers automatic generation. Allow GitHub Actions and Pages time to finish.
 
-Shows: edit shows.json. The first 2 events appear by default; each click reveals 2 additional shows until all are visible.
-Eight shows transcribed from the provided screenshot. The screenshot did not provide usable event URLs for the last six shows, so those display Details soon rather than fabricated links.
+IMPORTANT: If your Pages source uses a different branch or /docs folder, change the workflow branch and output path accordingly. Do not manually edit generated show cards in index.html. Edit index.template.html for non-calendar homepage changes.
 
-Header: single masked canvas flame lettering, avoiding overlapping letter layers.
+Current show times like 7:30-10:30 do not say AM or PM. To enable complete event structured data, supply explicit time zones and AM/PM or 24-hour start/end times. This package intentionally does not guess.
 
-Keep the original Wix hosting and domain settings until you approve the preview.
-
-V7: Each show displays venue, street address (or Address TBA), and start time (or Time TBA). Edit shows.json to replace placeholders with confirmed details. Initial 2 shows and +2 per click preserved.
+The existing script.js will still fetch shows.json and redraw the visible calendar; the generated HTML is for initial crawler access. If JavaScript fails, static shows remain visible.
