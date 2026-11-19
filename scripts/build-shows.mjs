@@ -11,13 +11,87 @@ const cards = future.map((s,i)=>`<article class="show-item${i>=2?' extra-show':'
 </article>`).join('\n');
 let html=template.replace(/<div id="show-list" class="show-list" aria-live="polite">[\s\S]*?<\/div>/,`<div id="show-list" class="show-list" aria-live="polite">\n${cards||'New shows coming soon!'}\n</div>`);
 if(html===template)throw Error('Cannot locate show-list placeholder in template');
-// Only publish event schema for confirmed venues, city and explicitly unambiguous times.
-const events=future.filter(s=>s.venue && !/announc|TBA/i.test(s.venue) && /,\s*NJ\b/i.test(s.address||'') && /\b(?:AM|PM)\b/i.test(s.time||'')).map(s=>({
- '@context':'https://schema.org','@type':'MusicEvent',name:s.title,startDate:s.date,
- eventStatus:'https://schema.org/EventScheduled',eventAttendanceMode:'https://schema.org/OfflineEventAttendanceMode',
- location:{'@type':'Place',name:s.venue,address:s.address},performer:{'@type':'MusicGroup',name:'Fire In The Annex',url:'https://fireintheannex.com/'},url:'https://fireintheannex.com/#shows'
-}));
-// The current JSON uses ambiguous 7:30-10:30 times; don't guess AM/PM or add misleading structured dates.
-if(events.length){html=html.replace('</head>',`<script type="application/ld+json">${JSON.stringify(events).replace(/</g,'\\u003c')}</script>\n</head>`)}
-fs.writeFileSync('index.html',html);
-console.log(`Generated ${future.length} shows and ${events.length} structured events`);
+// Generate structured data from confirmed event details.
+const events = future.flatMap(s => {
+  const venue = s.venue || s.location || '';
+  const address = s.address || '';
+  const time = s.time || '';
+
+  // Exclude events with unconfirmed locations or times.
+  if (
+    !venue ||
+    /TBA|announc|to be announced/i.test(venue) ||
+    !address ||
+    /TBA/i.test(time)
+  ) return [];
+
+  // Interpret existing calendar times as evening performances.
+  // Change shows.json to use explicit AM/PM for daytime shows.
+  const match = time.match(
+    /^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?\s*[-–]\s*(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i
+  );
+  if (!match) return [];
+
+  const to24 = (hour, minute, period = 'PM') => {
+    let h = Number(hour) % 12;
+    if (period.toUpperCase() === 'PM') h += 12;
+    return `${String(h).padStart(2, '0')}:${minute}:00`;
+  };
+
+  const start = to24(match[1], match[2], match[3]);
+  const end = to24(match[4], match[5], match[6]);
+
+  // NJ observes Eastern Time, including daylight saving.
+  const month = Number(s.date.slice(5, 7));
+  const day = Number(s.date.slice(8, 10));
+  const year = Number(s.date.slice(0, 4));
+
+  const nthSunday = (m, n) => {
+    const first = new Date(Date.UTC(year, m - 1, 1)).getUTCDay();
+    return 1 + ((7 - first) % 7) + (n - 1) * 7;
+  };
+
+  const dstStart = nthSunday(3, 2);
+  const dstEnd = nthSunday(11, 1);
+  const dst = month > 3 && month < 11 ||
+    month === 3 && day >= dstStart ||
+    month === 11 && day < dstEnd;
+
+  const offset = dst ? '-04:00' : '-05:00';
+
+  return [{
+    '@context': 'https://schema.org',
+    '@type': 'MusicEvent',
+    name: s.title,
+    startDate: `${s.date}T${start}${offset}`,
+    endDate: `${s.date}T${end}${offset}`,
+    eventStatus: 'https://schema.org/EventScheduled',
+    eventAttendanceMode:
+      'https://schema.org/OfflineEventAttendanceMode',
+    location: {
+      '@type': 'Place',
+      name: venue,
+      address: address
+    },
+    performer: {
+      '@type': 'MusicGroup',
+      name: 'Fire In The Annex',
+      url: 'https://fireintheannex.com/'
+    },
+    url: 'https://fireintheannex.com/#shows'
+  }];
+});
+
+if (events.length) {
+  html = html.replace(
+    '</head>',
+    `<script type="application/ld+json">${
+      JSON.stringify(events).replace(/</g, '\\u003c')
+    }</script>\n</head>`
+  );
+}
+
+fs.writeFileSync('index.html', html);
+console.log(
+  `Generated ${future.length} shows and ${events.length} structured events`
+);
